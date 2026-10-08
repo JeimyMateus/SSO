@@ -417,7 +417,7 @@ export function DashboardUsuariosView() {
                               ? "text-danger"
                               : caso.tipo === "warning"
                                 ? "text-warning"
-                                : "text-amber-500"
+                                : "text-warning-500"
                           )}
                         />
                         <span className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">

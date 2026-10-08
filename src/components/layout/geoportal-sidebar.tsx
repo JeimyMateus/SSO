@@ -329,17 +329,18 @@ export function GeoportalSidebar({
   const showUser = variant === "full";
   const showBranding = variant === "full";
 
-  const displayName = user?.displayName || user?.email?.split("@")[0] || "Paula Rozo";
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "Usuario";
   const initials = displayName
     .split(" ")
     .map((n: string) => n[0])
+    .filter(Boolean)
     .slice(0, 2)
     .join("")
-    .toUpperCase();
+    .toUpperCase() || "U";
 
   const handleLogout = async () => {
     await logout();
-    router.push("/login");
+    router.push("/login-sso");
   };
 
   // Theme state

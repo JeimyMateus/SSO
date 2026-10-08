@@ -65,6 +65,8 @@ interface RootLayoutProps {
   children: React.ReactNode;
 }
 
+import { AuthProvider } from "@/context/auth-context";
+
 export default async function RootLayout({
   children,
 }: RootLayoutProps) {
@@ -113,10 +115,12 @@ export default async function RootLayout({
           locale="es"
           messages={messages}
         >
-          <TooltipProvider>
-            {children}
-            <Toaster />
-          </TooltipProvider>
+          <AuthProvider>
+            <TooltipProvider>
+              {children}
+              <Toaster />
+            </TooltipProvider>
+          </AuthProvider>
         </NextIntlClientProvider>
       </body>
     </html>

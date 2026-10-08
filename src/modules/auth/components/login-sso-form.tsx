@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -12,13 +12,22 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function LoginSSOForm({ className }: { className?: string }) {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+
+  // Redirigir a dashboard si ya existe una sesión activa en Firebase
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/dashboard");
+    }
+  }, [user, authLoading, router]);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -51,16 +60,25 @@ export function LoginSSOForm({ className }: { className?: string }) {
     setTouched((prev) => ({ ...prev, [field]: true }));
   };
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     setGlobalError(null);
-    // Simular redirección / proceso de autenticación con Google
-    setTimeout(() => {
-      setIsGoogleLoading(false);
-      toast.info("Inicio con Google deshabilitado", {
-        description: "Esta función no está disponible en la versión de demostración.",
+    try {
+      const { signInWithPopup, GoogleAuthProvider } = await import("firebase/auth");
+      const { auth } = await import("@/lib/firebase/client");
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+
+      toast.success("Sesión iniciada con éxito");
+      router.replace('/dashboard');
+    } catch (error: any) {
+      console.error(error);
+      toast.error("Error en Google Login", {
+        description: error.message || "No se pudo iniciar sesión con Google.",
       });
-    }, 2000);
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   const showValidationToast = () => {

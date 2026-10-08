@@ -19,22 +19,43 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { useRouter } from "next/navigation";
 
 export function UserMenu() {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "Usuario";
+  const displayEmail = user?.email || "usuario@mineduc.cl";
+  const initials = displayName
+    .split(" ")
+    .map((n: string) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "U";
+  const photoURL = user?.photoURL || undefined;
+
+  const handleLogout = async () => {
+    setOpen(false);
+    await logout();
+    router.replace("/login-sso");
+  };
 
   const TriggerButton = (
     <button className="group flex items-center gap-2.5 rounded-full outline-none pr-2 pl-1 py-1 hover:bg-transparent data-[state=open]:bg-transparent transition-all cursor-pointer">
       <Avatar className="size-10 cursor-pointer transition-all duration-200 group-hover:ring-2 group-hover:ring-primary-300 group-hover:ring-offset-2 group-hover:ring-offset-background">
-        <AvatarImage src="https://github.com/shadcn.png" alt="@user" />
-        <AvatarFallback>PR</AvatarFallback>
+        {photoURL && <AvatarImage src={photoURL} alt={displayName} />}
+        <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>
       <div className="hidden sm:flex items-center gap-2 text-foreground/80 transition-colors group-hover:text-foreground">
         <div className="flex flex-col text-left leading-tight">
-          <span className="text-sm font-semibold text-foreground">Paula Rozo</span>
+          <span className="text-sm font-semibold text-foreground">{displayName}</span>
           <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-            <span className="text-primary font-bold text-xs leading-none">•</span> Administradora
+            <span className="text-primary font-bold text-xs leading-none">•</span> Autenticado
           </span>
         </div>
         <ChevronDown
@@ -77,15 +98,15 @@ export function UserMenu() {
             {/* User Info Header */}
             <div className="flex items-center gap-4 mb-6 px-2">
               <Avatar className="size-16">
-                <AvatarImage src="https://github.com/shadcn.png" alt="@user" />
-                <AvatarFallback>PR</AvatarFallback>
+                {photoURL && <AvatarImage src={photoURL} alt={displayName} />}
+                <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col">
-                <span className="text-body font-bold text-foreground">Paula Rozo</span>
+                <span className="text-body font-bold text-foreground">{displayName}</span>
                 <span className="text-caption text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <span className="text-primary font-bold text-xs leading-none">•</span> Administradora
+                  <span className="text-primary font-bold text-xs leading-none">•</span> Autenticado
                 </span>
-                <span className="text-caption text-muted-foreground/80 mt-0.5">paula.rozo@geoportal.gob.ec</span>
+                <span className="text-caption text-muted-foreground/80 mt-0.5">{displayEmail}</span>
               </div>
             </div>
 
@@ -94,7 +115,7 @@ export function UserMenu() {
             <div className="flex flex-col gap-2">
               <MobileMenuItem icon={User} label="Perfil" onClick={() => setOpen(false)} />
               <div className="h-px bg-border my-1 mx-2" />
-              <MobileMenuItem icon={LogOut} label="Cerrar sesión" isWarning onClick={() => setOpen(false)} />
+              <MobileMenuItem icon={LogOut} label="Cerrar sesión" isWarning onClick={handleLogout} />
             </div>
           </div>
         </SheetContent>
@@ -122,13 +143,13 @@ export function UserMenu() {
       >
         <div className="flex items-center gap-3 px-3 py-2 mb-1.5 bg-surface-subtle/50 rounded-xl border border-border/40">
           <Avatar className="size-9">
-            <AvatarImage src="https://github.com/shadcn.png" alt="@user" />
-            <AvatarFallback>PR</AvatarFallback>
+            {photoURL && <AvatarImage src={photoURL} alt={displayName} />}
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0">
-            <span className="text-body-sm font-bold text-foreground truncate">Paula Rozo</span>
+            <span className="text-body-sm font-bold text-foreground truncate">{displayName}</span>
             <span className="text-caption text-muted-foreground flex items-center gap-1 truncate">
-              <span className="text-primary font-bold text-xs leading-none">•</span> Administradora
+              <span className="text-primary font-bold text-xs leading-none">•</span> Autenticado
             </span>
           </div>
         </div>
@@ -137,7 +158,7 @@ export function UserMenu() {
         <div className="flex flex-col gap-1 px-1">
           <DesktopMenuItem icon={User} label="Perfil" onClick={() => setOpen(false)} />
           <DropdownMenuSeparator className="my-1.5 bg-border/50" />
-          <DesktopMenuItem icon={LogOut} label="Cerrar sesión" isWarning onClick={() => setOpen(false)} />
+          <DesktopMenuItem icon={LogOut} label="Cerrar sesión" isWarning onClick={handleLogout} />
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
