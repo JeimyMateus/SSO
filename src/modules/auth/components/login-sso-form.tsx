@@ -36,7 +36,13 @@ export function LoginSSOForm({ className }: { className?: string }) {
             router.replace("/dashboard");
           }
         })
-        .catch(async () => {
+        .catch(async (err: any) => {
+          const errMsg = err?.message || "";
+          if (errMsg.includes("verificación en dos pasos") || errMsg.includes("MFA_REQUIRED")) {
+            // Sesión con doble factor pendiente: redirigir a doble factor sin cerrar sesión
+            router.replace("/doble-factor");
+            return;
+          }
           const { signOut } = await import("firebase/auth");
           const { auth } = await import("@/lib/firebase/client");
           await signOut(auth).catch(() => {});
@@ -147,33 +153,29 @@ export function LoginSSOForm({ className }: { className?: string }) {
     try {
       const { signInWithEmailAndPassword, signOut } = await import("firebase/auth");
       const { auth } = await import("@/lib/firebase/client");
-      await signInWithEmailAndPassword(
+      const userCredential = await signInWithEmailAndPassword(
         auth,
         formData.email.trim().toLowerCase(),
         formData.password
       );
 
-      // Verificar autorización y si requiere cambio de clave en primer login
+      // Despachar el OTP inicial de forma automática y redirigir a la pantalla de 2FA
       try {
-        const profile = await fetchCurrentAuthProfile();
-
-        if (profile?.debeCambiarPassword) {
-          setShowMustChangePassword(true);
-          toast.info("Cambio de contraseña requerido", {
-            description: "Debes actualizar tu contraseña temporal antes de continuar.",
-          });
-        } else {
-          toast.success("Sesión iniciada con éxito");
-          router.replace("/dashboard");
-        }
-      } catch (profileErr: any) {
-        await signOut(auth).catch(() => {});
-        const errorMsg = profileErr.message || "Tu usuario no tiene acceso al sistema.";
-        setGlobalError(errorMsg);
-        toast.error("Acceso denegado", {
-          description: errorMsg,
+        const token = await userCredential.user.getIdToken();
+        await fetch("/api/auth/send-otp", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
+        toast.info("Código de verificación enviado", {
+          description: "Revisa tu correo para completar el acceso.",
+        });
+      } catch (sendErr) {
+        console.error("Error al enviar OTP automático:", sendErr);
       }
+
+      router.replace("/doble-factor");
     } catch (error: any) {
       console.error("Error al autenticar credenciales:", error);
       let errorMsg = "Correo institucional o contraseña incorrectos.";

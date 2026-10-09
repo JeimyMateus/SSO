@@ -34,8 +34,17 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
           })
           .catch((err) => {
             if (isMounted) {
+              const errMsg = err.message || "";
+              if (errMsg.includes("verificación en dos pasos") || errMsg.includes("MFA_REQUIRED")) {
+                toast.info("Verificación requerida", {
+                  description: "Por favor, completa la verificación de dos pasos.",
+                });
+                router.replace("/doble-factor");
+                return;
+              }
+
               toast.error("Acceso denegado", {
-                description: err.message || "Tu usuario no tiene acceso al sistema.",
+                description: errMsg || "Tu usuario no tiene acceso al sistema.",
               });
               logout().then(() => router.replace("/login-sso"));
             }

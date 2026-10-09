@@ -49,6 +49,7 @@ describe("verifyActiveUser", () => {
       uid: "user-123",
       email: "unverified@example.com",
       email_verified: false,
+      firebase: { sign_in_provider: "google.com" },
     });
 
     await expect(verifyActiveUser(request)).rejects.toThrow(AuthorizationError);
@@ -185,5 +186,105 @@ describe("verifyActiveUser", () => {
     expect(result.decodedToken).toEqual(mockDecodedToken);
     expect(result.usuario).toEqual(mockUserData);
     expect(result.usuario.active).toBe(true);
+  });
+
+  it("should throw 403 MFA_REQUIRED when sign_in_provider is password and twoFactorVerified is false", async () => {
+    const request = new Request("http://localhost:3000/api/auth/me", {
+      headers: { Authorization: "Bearer password-token" },
+    });
+
+    (adminAuth.verifyIdToken as jest.Mock).mockResolvedValue({
+      uid: "user-pwd",
+      email: "pwd@example.com",
+      email_verified: true,
+      firebase: { sign_in_provider: "password" },
+      twoFactorVerified: false,
+    });
+
+    const mockUserData = {
+      id: "usr-4",
+      email: "pwd@example.com",
+      active: true,
+    };
+
+    const mockGet = jest.fn().mockResolvedValue({
+      empty: false,
+      docs: [{ id: "usr-4", data: () => mockUserData }],
+    });
+    const mockLimit = jest.fn().mockReturnValue({ get: mockGet });
+    const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+    (adminDb.collection as jest.Mock).mockReturnValue({ where: mockWhere });
+
+    await expect(verifyActiveUser(request)).rejects.toThrow(AuthorizationError);
+    await expect(verifyActiveUser(request)).rejects.toMatchObject({
+      statusCode: 403,
+      code: "MFA_REQUIRED",
+    });
+  });
+
+  it("should succeed when sign_in_provider is password and twoFactorVerified is true", async () => {
+    const request = new Request("http://localhost:3000/api/auth/me", {
+      headers: { Authorization: "Bearer password-token" },
+    });
+
+    const mockDecodedToken = {
+      uid: "user-pwd",
+      email: "pwd@example.com",
+      email_verified: true,
+      firebase: { sign_in_provider: "password" },
+      twoFactorVerified: true,
+    };
+
+    (adminAuth.verifyIdToken as jest.Mock).mockResolvedValue(mockDecodedToken);
+
+    const mockUserData = {
+      id: "usr-4",
+      email: "pwd@example.com",
+      active: true,
+    };
+
+    const mockGet = jest.fn().mockResolvedValue({
+      empty: false,
+      docs: [{ id: "usr-4", data: () => mockUserData }],
+    });
+    const mockLimit = jest.fn().mockReturnValue({ get: mockGet });
+    const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+    (adminDb.collection as jest.Mock).mockReturnValue({ where: mockWhere });
+
+    const result = await verifyActiveUser(request);
+    expect(result.decodedToken).toEqual(mockDecodedToken);
+    expect(result.usuario).toEqual(mockUserData);
+  });
+
+  it("should bypass 2FA when sign_in_provider is google.com", async () => {
+    const request = new Request("http://localhost:3000/api/auth/me", {
+      headers: { Authorization: "Bearer google-token" },
+    });
+
+    const mockDecodedToken = {
+      uid: "user-google",
+      email: "google@example.com",
+      email_verified: true,
+      firebase: { sign_in_provider: "google.com" },
+    };
+
+    (adminAuth.verifyIdToken as jest.Mock).mockResolvedValue(mockDecodedToken);
+
+    const mockUserData = {
+      id: "usr-5",
+      email: "google@example.com",
+      active: true,
+    };
+
+    const mockGet = jest.fn().mockResolvedValue({
+      empty: false,
+      docs: [{ id: "usr-5", data: () => mockUserData }],
+    });
+    const mockLimit = jest.fn().mockReturnValue({ get: mockGet });
+    const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+    (adminDb.collection as jest.Mock).mockReturnValue({ where: mockWhere });
+
+    const result = await verifyActiveUser(request);
+    expect(result.decodedToken).toEqual(mockDecodedToken);
   });
 });

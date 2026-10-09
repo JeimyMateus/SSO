@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, KeyboardEvent, ChangeEvent, ClipboardEvent } from "react";
+import { useState, useRef, useEffect, KeyboardEvent, ChangeEvent, ClipboardEvent } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getAssetPath } from "@/lib/assets";
@@ -10,32 +10,58 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { auth } from "@/lib/firebase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { fetchCurrentAuthProfile } from "@/modules/gestion-usuarios/services/client-usuarios";
 
 export function DobleFactorForm({ className }: { className?: string }) {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [code, setCode] = useState<string[]>(Array(6).fill(""));
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [userEmail, setUserEmail] = useState<string>("");
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const isCodeComplete = code.every((digit) => digit !== "");
 
+  // Timer para cooldown de reenvío
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  // Verificar sesión activa mediante useAuth evitando race condition
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        toast.error("Sesión requerida", {
+          description: "Por favor, inicia sesión para verificar tu identidad.",
+        });
+        router.replace("/login-sso");
+      } else {
+        setUserEmail(user.email || "");
+      }
+    }
+  }, [user, authLoading, router]);
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>, index: number) => {
     const value = e.target.value;
-    // Permitir solo números
     if (!/^[0-9]*$/.test(value)) return;
 
     const newCode = [...code];
 
-    // Si escribió un caracter
     if (value.length > 0) {
-      newCode[index] = value.slice(-1); // tomar solo el último caracter
+      newCode[index] = value.slice(-1);
       setCode(newCode);
-      // Foco al siguiente input
       if (index < 5) {
         inputRefs.current[index + 1]?.focus();
       }
     } else {
-      // Si borró
       newCode[index] = "";
       setCode(newCode);
     }
@@ -44,7 +70,6 @@ export function DobleFactorForm({ className }: { className?: string }) {
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>, index: number) => {
     if (e.key === "Backspace") {
       if (code[index] === "" && index > 0) {
-        // Si está vacío y presiona borrar, ir al anterior
         inputRefs.current[index - 1]?.focus();
         const newCode = [...code];
         newCode[index - 1] = "";
@@ -64,12 +89,11 @@ export function DobleFactorForm({ className }: { className?: string }) {
     }
     setCode(newCode);
 
-    // Foco al último input modificado o al final
     const focusIndex = Math.min(pastedData.length, 5);
     inputRefs.current[focusIndex]?.focus();
   };
 
-  const verifyCode = (e: React.FormEvent) => {
+  const verifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isCodeComplete) {
       toast.warning("Código incompleto", {
@@ -78,15 +102,104 @@ export function DobleFactorForm({ className }: { className?: string }) {
       return;
     }
 
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      toast.error("Sesión expirada", {
+        description: "Por favor, inicia sesión de nuevo.",
+      });
+      router.replace("/login-sso");
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      const token = await currentUser.getIdToken();
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code: code.join("") }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "El código ingresado es incorrecto o ha expirado.");
+      }
+
+      // Refrescar el token para que el cliente reciba el custom claim `twoFactorVerified: true`
+      await currentUser.getIdToken(true);
+
       toast.success("Verificación exitosa", {
         description: "Has ingresado correctamente. Redirigiendo...",
       });
-      // Aquí iría la redirección al dashboard
-      router.push('/dashboard');
-    }, 1500);
+
+      // Verificar si requiere cambio obligatorio de contraseña
+      try {
+        const profile = await fetchCurrentAuthProfile();
+        if (profile?.debeCambiarPassword) {
+          router.replace("/login-sso?mustChange=true");
+          return;
+        }
+      } catch {
+        // Continuar al dashboard
+      }
+
+      router.replace("/dashboard");
+    } catch (error: any) {
+      toast.error("Error de verificación", {
+        description: error.message || "No se pudo verificar el código.",
+      });
+      setCode(Array(6).fill(""));
+      inputRefs.current[0]?.focus();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (cooldown > 0 || isResending) return;
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      toast.error("Sesión requerida", {
+        description: "Por favor, inicia sesión de nuevo.",
+      });
+      router.replace("/login-sso");
+      return;
+    }
+
+    setIsResending(true);
+    try {
+      const token = await currentUser.getIdToken();
+      const response = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo reenviar el código.");
+      }
+
+      toast.success("Nuevo código enviado", {
+        description: "Revisa tu bandeja de correo institucional.",
+      });
+      setCooldown(60);
+      setCode(Array(6).fill(""));
+      inputRefs.current[0]?.focus();
+    } catch (error: any) {
+      toast.error("Error al reenviar", {
+        description: error.message || "Intenta nuevamente en unos momentos.",
+      });
+    } finally {
+      setIsResending(false);
+    }
   };
 
   return (
@@ -127,7 +240,11 @@ export function DobleFactorForm({ className }: { className?: string }) {
           <button
             type="button"
             className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-secondary dark:hover:text-secondary-300 transition-colors"
-            onClick={() => router.push('/login-sso')}
+            onClick={async () => {
+              const { signOut } = await import("firebase/auth");
+              await signOut(auth).catch(() => {});
+              router.push("/login-sso");
+            }}
           >
             <ArrowLeft className="size-4" />
             Volver al inicio
@@ -136,7 +253,11 @@ export function DobleFactorForm({ className }: { className?: string }) {
             Verificación de seguridad
           </h2>
           <p className="font-sans text-body-sm text-muted-foreground text-balance">
-            Ingresa el código de 6 dígitos que hemos enviado a tu correo institucional para confirmar tu identidad.
+            Ingresa el código de 6 dígitos que enviamos a{" "}
+            <span className="font-semibold text-foreground">
+              {userEmail || "tu correo institucional"}
+            </span>{" "}
+            para confirmar tu identidad.
           </p>
         </div>
 
@@ -153,12 +274,12 @@ export function DobleFactorForm({ className }: { className?: string }) {
                 inputMode="numeric"
                 maxLength={1}
                 value={digit}
+                disabled={isLoading}
                 onChange={(e) => handleChange(e, index)}
                 onKeyDown={(e) => handleKeyDown(e, index)}
                 onPaste={handlePaste}
                 className={cn(
                   "w-12 h-14 sm:w-14 sm:h-16 flex-1 rounded-md border text-center font-heading text-h3 font-bold outline-none transition-all duration-300",
-                  // Variación suave de fondo neutral cuando está lleno
                   digit !== ""
                     ? "bg-neutral-300 border-neutral-300 text-neutral-500 scale-105 dark:bg-neutral-700 dark:border-neutral-700 dark:text-neutral-500"
                     : "bg-surface border-input text-neutral-500 focus:border-neutral-300 focus:ring-2 focus:ring-ring"
@@ -170,7 +291,7 @@ export function DobleFactorForm({ className }: { className?: string }) {
           <div
             className="w-full"
             onClick={(e) => {
-              if (!isCodeComplete) {
+              if (!isCodeComplete && !isLoading) {
                 e.preventDefault();
                 toast.warning("Código incompleto", {
                   description: "Por favor, ingresa los 6 dígitos del código enviado a tu correo.",
@@ -192,13 +313,20 @@ export function DobleFactorForm({ className }: { className?: string }) {
         <div className="text-center mt-2">
           <p className="text-body-sm text-muted-foreground">
             ¿No recibiste el código?{" "}
-            <button
-              type="button"
-              className="text-primary hover:underline font-medium"
-              onClick={() => toast.success("Nuevo código enviado a tu correo.")}
-            >
-              Reenviar
-            </button>
+            {cooldown > 0 ? (
+              <span className="text-muted-foreground font-medium">
+                Reenviar en {cooldown}s
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="text-primary hover:underline font-medium disabled:opacity-50"
+                disabled={isResending}
+                onClick={handleResendOTP}
+              >
+                {isResending ? "Enviando..." : "Reenviar"}
+              </button>
+            )}
           </p>
         </div>
       </div>

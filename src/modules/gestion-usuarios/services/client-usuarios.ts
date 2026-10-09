@@ -18,8 +18,11 @@ async function handleApiResponse<T>(response: Response, defaultError: string): P
     const errorData = await response.json().catch(() => ({}));
     const message = errorData.error || `${defaultError} (HTTP ${response.status})`;
     
-    // Si la petición es rechazada por inactividad o token inválido, cerrar la sesión local
-    if ((response.status === 401 || response.status === 403) && typeof window !== "undefined") {
+    // Si la petición es rechazada por inactividad o token inválido (excepto si requiere MFA), cerrar la sesión local
+    if (
+      (response.status === 401 || (response.status === 403 && errorData.code !== "MFA_REQUIRED")) &&
+      typeof window !== "undefined"
+    ) {
       try {
         const { signOut } = await import("firebase/auth");
         await signOut(auth).catch(() => {});
