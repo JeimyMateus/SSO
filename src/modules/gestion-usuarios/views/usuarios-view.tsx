@@ -20,7 +20,6 @@ import { toast } from "sonner";
 
 import {
   UsuarioItem,
-  mockUsuariosData,
 } from "../data/usuarios-data";
 import { UsuariosFilterBar } from "../components/usuarios-filter-bar";
 import { UsuariosTable } from "../components/usuarios-table";
@@ -32,9 +31,42 @@ import {
   UsuariosSummaryCards,
   SummaryFilterType,
 } from "../components/usuarios-summary-cards";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  fetchUsuarios,
+  createUsuarioApi,
+  updateUsuarioApi,
+  deleteUsuarioApi,
+} from "../services/client-usuarios";
 
 export function UsuariosView() {
-  const [usuarios, setUsuarios] = React.useState<UsuarioItem[]>(mockUsuariosData);
+  const { user, loading: authLoading } = useAuth();
+  const [usuarios, setUsuarios] = React.useState<UsuarioItem[]>([]);
+  const [isLoadingData, setIsLoadingData] = React.useState(true);
+
+  // Cargar usuarios desde Firestore
+  const loadUsuarios = React.useCallback(async () => {
+    setIsLoadingData(true);
+    try {
+      const data = await fetchUsuarios();
+      setUsuarios(data);
+    } catch (error: any) {
+      console.error("Error al obtener usuarios desde Firestore:", error);
+      toast.error("Error al cargar usuarios", {
+        description: error.message || "No se pudo conectar con Firestore Emulator.",
+      });
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (user) {
+      loadUsuarios();
+    } else if (!authLoading) {
+      setIsLoadingData(false);
+    }
+  }, [user, authLoading, loadUsuarios]);
 
   // Filtros
   const [searchTerm, setSearchTerm] = React.useState("");
@@ -57,10 +89,10 @@ export function UsuariosView() {
   const sinAccesosCount = React.useMemo(
     () =>
       usuarios.filter((u) => {
-        const totalAsig = u.sedes.reduce(
+        const totalAsig = u.sedes?.reduce(
           (acc, s) => acc + (s.asignaciones?.length || 0),
           0
-        );
+        ) || 0;
         return totalAsig === 0;
       }).length,
     [usuarios]
@@ -141,10 +173,10 @@ export function UsuariosView() {
     return usuarios.filter((user) => {
       // 0. Usuarios sin accesos
       if (filterSinAccesos) {
-        const totalAsig = user.sedes.reduce(
+        const totalAsig = user.sedes?.reduce(
           (acc, s) => acc + (s.asignaciones?.length || 0),
           0
-        );
+        ) || 0;
         if (totalAsig > 0) return false;
       }
 
@@ -162,21 +194,21 @@ export function UsuariosView() {
 
       // 2. Sede
       if (selectedSede !== "Todas") {
-        if (!user.sedes.some((s) => s.sedeNombre === selectedSede)) return false;
+        if (!user.sedes?.some((s) => s.sedeNombre === selectedSede)) return false;
       }
 
       // 3. Aplicación
       if (selectedApp !== "Todas") {
-        const hasApp = user.sedes.some((s) =>
-          s.asignaciones.some((a) => a.aplicacionNombre === selectedApp)
+        const hasApp = user.sedes?.some((s) =>
+          s.asignaciones?.some((a) => a.aplicacionNombre === selectedApp)
         );
         if (!hasApp) return false;
       }
 
       // 4. Rol
       if (selectedRol !== "Todos") {
-        const hasRol = user.sedes.some((s) =>
-          s.asignaciones.some((a) => a.rolNombre === selectedRol)
+        const hasRol = user.sedes?.some((s) =>
+          s.asignaciones?.some((a) => a.rolNombre === selectedRol)
         );
         if (!hasRol) return false;
       }
@@ -224,19 +256,28 @@ export function UsuariosView() {
     setIsPasswordOpen(true);
   };
 
-  const handleSaveUser = (savedUser: UsuarioItem) => {
-    setUsuarios((prev) => {
-      const exists = prev.find((u) => u.id === savedUser.id);
-      if (exists) {
-        return prev.map((u) => (u.id === savedUser.id ? savedUser : u));
+  const handleSaveUser = async (savedUser: UsuarioItem) => {
+    try {
+      const exists = usuarios.some((u) => u.id === savedUser.id);
+      if (exists && savedUser.id) {
+        // Actualizar usuario existente en Firestore
+        const updated = await updateUsuarioApi(savedUser.id, savedUser);
+        setUsuarios((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+        if (formUser?.id === updated.id) setFormUser(updated);
+        if (accessUser?.id === updated.id) setAccessUser(updated);
+        if (detailUser?.id === updated.id) setDetailUser(updated);
+      } else {
+        // Crear nuevo usuario en Firestore
+        const { id, ...dataToCreate } = savedUser;
+        const created = await createUsuarioApi(dataToCreate);
+        setUsuarios((prev) => [created, ...prev]);
       }
-      return [savedUser, ...prev];
-    });
-    
-    // Si algún modal está abierto, actualizamos su estado para que refleje los cambios en vivo
-    if (formUser?.id === savedUser.id) setFormUser(savedUser);
-    if (accessUser?.id === savedUser.id) setAccessUser(savedUser);
-    if (detailUser?.id === savedUser.id) setDetailUser(savedUser);
+    } catch (error: any) {
+      console.error("Error al guardar usuario:", error);
+      toast.error("Error al guardar usuario", {
+        description: error.message || "No se pudo guardar el usuario en Firestore.",
+      });
+    }
   };
 
   const handlePasswordSuccess = (usuarioId: string) => {
@@ -259,13 +300,21 @@ export function UsuariosView() {
         description: `Estás a punto de inactivar a este usuario. Esta acción suspenderá su acceso a todas las aplicaciones asignadas.`,
         confirmText: "Inactivar",
         cancelText: "Cerrar",
-        onConfirm: () => {
-          setUsuarios((prev) =>
-            prev.map((u) => (u.id === usuario.id ? { ...u, estado: "Inactivo" } : u))
-          );
-          toast.info("Usuario inactivado correctamente", {
-            description: `${nombreCompleto} ha pasado a estado Inactivo.`,
-          });
+        onConfirm: async () => {
+          try {
+            const updated = await updateUsuarioApi(usuario.id, { estado: "Inactivo" });
+            setUsuarios((prev) =>
+              prev.map((u) => (u.id === usuario.id ? updated : u))
+            );
+            toast.info("Usuario inactivado correctamente", {
+              description: `${nombreCompleto} ha pasado a estado Inactivo.`,
+            });
+          } catch (error: any) {
+            console.error("Error al inactivar usuario:", error);
+            toast.error("Error al cambiar estado", {
+              description: error.message || "No se pudo inactivar el usuario en Firestore.",
+            });
+          }
         },
       });
     } else {
@@ -276,13 +325,21 @@ export function UsuariosView() {
         description: `Estás a punto de activar a este usuario. Esta acción restablecerá su acceso a todas las aplicaciones asignadas.`,
         confirmText: "Activar",
         cancelText: "Cerrar",
-        onConfirm: () => {
-          setUsuarios((prev) =>
-            prev.map((u) => (u.id === usuario.id ? { ...u, estado: "Activo" } : u))
-          );
-          toast.success("Usuario activado correctamente", {
-            description: `${nombreCompleto} ha pasado a estado Activo.`,
-          });
+        onConfirm: async () => {
+          try {
+            const updated = await updateUsuarioApi(usuario.id, { estado: "Activo" });
+            setUsuarios((prev) =>
+              prev.map((u) => (u.id === usuario.id ? updated : u))
+            );
+            toast.success("Usuario activado correctamente", {
+              description: `${nombreCompleto} ha pasado a estado Activo.`,
+            });
+          } catch (error: any) {
+            console.error("Error al activar usuario:", error);
+            toast.error("Error al activar usuario", {
+              description: error.message || "No se pudo activar el usuario en Firestore.",
+            });
+          }
         },
       });
     }
@@ -653,6 +710,7 @@ export function UsuariosView() {
           {/* Tabla */}
           <UsuariosTable
             usuarios={filteredUsuarios}
+            isLoading={isLoadingData}
             onViewDetail={handleOpenDetail}
             onEdit={handleOpenEdit}
             onManageAccess={handleOpenAccess}

@@ -23,7 +23,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Eye, Edit, ShieldCheck, Key, Power, PowerOff, ChevronDown, Building2, LayoutGrid, MoreVertical } from "lucide-react";
+import { Eye, Edit, ShieldCheck, Key, Power, PowerOff, ChevronDown, Building2, LayoutGrid, MoreVertical, Loader2 } from "lucide-react";
 import { UsuarioItem } from "../data/usuarios-data";
 import {
   Pagination,
@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 
 interface UsuariosTableProps {
   usuarios: UsuarioItem[];
+  isLoading?: boolean;
   onViewDetail: (usuario: UsuarioItem) => void;
   onEdit: (usuario: UsuarioItem) => void;
   onManageAccess: (usuario: UsuarioItem) => void;
@@ -180,6 +181,7 @@ function AccesosCell({
 
 export function UsuariosTable({
   usuarios,
+  isLoading = false,
   onViewDetail,
   onEdit,
   onManageAccess,
@@ -211,10 +213,19 @@ export function UsuariosTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedUsuarios.length === 0 ? (
+            {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
-                  No se encontraron usuarios.
+                <TableCell colSpan={7} className="h-32 text-center">
+                  <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="size-6 animate-spin text-primary" />
+                    <span className="text-xs font-medium">Cargando usuarios desde Firestore...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : paginatedUsuarios.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground text-xs">
+                  No se encontraron usuarios registrados en Firestore.
                 </TableCell>
               </TableRow>
             ) : (

@@ -17,6 +17,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "next dev",
+    "emulators": "firebase emulators:start --project demo-sso",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
