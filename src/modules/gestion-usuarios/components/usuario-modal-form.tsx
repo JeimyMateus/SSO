@@ -201,8 +201,8 @@ export function UsuarioModalForm({
       if (!tipoDocumento) newErrors.tipoDocumento = "Selecciona el tipo de documento.";
       if (!identificacion.trim()) {
         newErrors.identificacion = "El número de documento es obligatorio.";
-      } else if (identificacion.trim().length < 8) {
-        newErrors.identificacion = "El documento debe contener al menos 8 caracteres.";
+      } else if (!/^\d{5,20}$/.test(identificacion.trim())) {
+        newErrors.identificacion = "El número de documento debe tener entre 5 y 20 dígitos numéricos.";
       }
       if (!nombre.trim()) newErrors.nombre = "El nombre es obligatorio.";
       if (!apellidos.trim()) newErrors.apellidos = "Los apellidos son obligatorios.";
@@ -210,6 +210,9 @@ export function UsuarioModalForm({
         newErrors.correo = "El correo electrónico es obligatorio.";
       } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo.trim())) {
         newErrors.correo = "Ingresa un correo electrónico válido.";
+      }
+      if (telefono.trim() && !/^\+?[0-9]{7,15}$/.test(telefono.trim())) {
+        newErrors.telefono = "El teléfono debe tener entre 7 y 15 dígitos numéricos.";
       }
       if (!estado) newErrors.estado = "El estado es obligatorio.";
     } else if (stepIndex === 1) {
@@ -456,11 +459,13 @@ export function UsuarioModalForm({
                       placeholder="1719874563"
                       value={identificacion}
                       onChange={(e) => {
-                        setIdentificacion(e.target.value);
+                        const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 20);
+                        setIdentificacion(digitsOnly);
                         if (errors.identificacion) {
                           setErrors((prev) => ({ ...prev, identificacion: "" }));
                         }
                       }}
+                      maxLength={20}
                       className="font-mono text-xs"
                     />
                   </InputGroup>
@@ -632,16 +637,33 @@ export function UsuarioModalForm({
                     </label>
                     <InputGroup
                       size="sm"
+                      state={errors.telefono ? "error" : "default"}
                       leftIcon={<Phone className="size-4 text-muted-foreground" />}
                     >
                       <InputGroupInput
                         type="tel"
                         placeholder="+593 99 123 4567"
                         value={telefono}
-                        onChange={(e) => setTelefono(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const hasPlus = val.startsWith("+");
+                          const digits = val.replace(/\D/g, "").slice(0, 15);
+                          const sanitized = hasPlus ? `+${digits}` : digits;
+                          setTelefono(sanitized);
+                          if (errors.telefono) {
+                            setErrors((prev) => ({ ...prev, telefono: "" }));
+                          }
+                        }}
                         className="text-xs"
+                        maxLength={16}
                       />
                     </InputGroup>
+                    {errors.telefono && (
+                      <p className="text-[11px] text-danger font-medium flex items-center gap-1.5 animate-in fade-in-50 duration-150">
+                        <AlertCircle className="size-3.5 shrink-0" />
+                        <span>{errors.telefono}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
