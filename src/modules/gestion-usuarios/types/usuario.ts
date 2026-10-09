@@ -81,6 +81,8 @@ export interface UsuarioItem {
   estado: "Activo" | "Inactivo" | "Pendiente";
   fechaCreacion: string;
   sedes: UsuarioSede[];
+  authUid?: string;
+  debeCambiarPassword?: boolean;
   createdAt?: number;
   updatedAt?: number;
 }

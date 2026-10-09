@@ -13,6 +13,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { fetchCurrentAuthProfile } from "@/modules/gestion-usuarios/services/client-usuarios";
+import { MustChangePasswordDialog } from "./must-change-password-dialog";
 
 export function LoginSSOForm({ className }: { className?: string }) {
   const router = useRouter();
@@ -21,13 +23,24 @@ export function LoginSSOForm({ className }: { className?: string }) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [showMustChangePassword, setShowMustChangePassword] = useState(false);
 
-  // Redirigir a dashboard si ya existe una sesión activa en Firebase
+  // Redirigir a dashboard si ya existe una sesión activa en Firebase y no requiere cambio de clave
   useEffect(() => {
-    if (!authLoading && user) {
-      router.replace("/dashboard");
+    if (!authLoading && user && !showMustChangePassword) {
+      fetchCurrentAuthProfile()
+        .then((profile) => {
+          if (profile.debeCambiarPassword) {
+            setShowMustChangePassword(true);
+          } else {
+            router.replace("/dashboard");
+          }
+        })
+        .catch(() => {
+          router.replace("/dashboard");
+        });
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, showMustChangePassword, router]);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -70,7 +83,7 @@ export function LoginSSOForm({ className }: { className?: string }) {
       await signInWithPopup(auth, provider);
 
       toast.success("Sesión iniciada con éxito");
-      router.replace('/dashboard');
+      router.replace("/dashboard");
     } catch (error: any) {
       console.error(error);
       toast.error("Error en Google Login", {
@@ -96,7 +109,7 @@ export function LoginSSOForm({ className }: { className?: string }) {
     toast.warning("Datos incompletos", { description: msg });
   };
 
-  const handleCredentialsLogin = (e: React.FormEvent) => {
+  const handleCredentialsLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!isFormValid) {
@@ -107,11 +120,49 @@ export function LoginSSOForm({ className }: { className?: string }) {
     setIsLoading(true);
     setGlobalError(null);
 
-    // Simular validación frontend y backend mock
-    setTimeout(() => {
+    try {
+      const { signInWithEmailAndPassword } = await import("firebase/auth");
+      const { auth } = await import("@/lib/firebase/client");
+      await signInWithEmailAndPassword(
+        auth,
+        formData.email.trim().toLowerCase(),
+        formData.password
+      );
+
+      // Verificar si requiere cambio de clave en primer login
+      const profile = await fetchCurrentAuthProfile().catch(() => null);
+
+      if (profile?.debeCambiarPassword) {
+        setShowMustChangePassword(true);
+        toast.info("Cambio de contraseña requerido", {
+          description: "Debes actualizar tu contraseña temporal antes de continuar.",
+        });
+      } else {
+        toast.success("Sesión iniciada con éxito");
+        router.replace("/dashboard");
+      }
+    } catch (error: any) {
+      console.error("Error al autenticar credenciales:", error);
+      let errorMsg = "Correo institucional o contraseña incorrectos.";
+      if (
+        error.code === "auth/invalid-credential" ||
+        error.code === "auth/user-not-found" ||
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/invalid-email"
+      ) {
+        errorMsg = "Correo institucional o contraseña incorrectos.";
+      } else if (error.code === "auth/too-many-requests") {
+        errorMsg = "Demasiados intentos fallidos. Por favor, intenta más tarde.";
+      } else if (error.code === "auth/user-disabled") {
+        errorMsg = "Esta cuenta de usuario ha sido desactivada por el administrador.";
+      }
+      setGlobalError(errorMsg);
+      toast.error("Error al iniciar sesión", {
+        description: errorMsg,
+      });
+    } finally {
       setIsLoading(false);
-      router.push('/doble-factor');
-    }, 1500);
+    }
   };
 
   return (
@@ -171,43 +222,49 @@ export function LoginSSOForm({ className }: { className?: string }) {
             )
           }
         >
-          {isGoogleLoading ? "Procesando..." : "Continuar con Google"}
+          {isGoogleLoading ? "Conectando con Google..." : "Iniciar sesión con Google"}
         </Button>
 
-        <div className="flex items-center gap-4 text-xs">
-          <span className="flex-1 border-t border-border" />
-          <span className="text-muted-foreground font-sans">
-            O iniciar sesión con credenciales
-          </span>
-          <span className="flex-1 border-t border-border" />
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-card px-2 text-muted-foreground font-sans font-medium">O continúa con tu cuenta</span>
+          </div>
         </div>
 
-        <form onSubmit={handleCredentialsLogin} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <label
-              htmlFor="email"
-              className="font-sans text-body-sm font-medium text-foreground"
-            >
-              Correo institucional
+        <form onSubmit={handleCredentialsLogin} className="space-y-4">
+          {globalError && (
+            <div className="p-3 bg-danger-100 border border-danger-200 text-danger-700 text-body-sm rounded-lg font-sans">
+              {globalError}
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-body-sm font-semibold font-sans text-foreground" htmlFor="email">
+              Correo institucional <span className="text-danger">*</span>
             </label>
-            <InputGroup state={touched.email ? (emailErrorMsg ? "error" : "success") : "default"}>
-              <InputGroupAddon>
+            <InputGroup state={touched.email && emailErrorMsg ? "error" : "default"}>
+              <InputGroupAddon align="inline-start">
                 <InputGroupText>
-                  <Mail className="size-4" />
+                  <Mail className="h-5 w-5" />
                 </InputGroupText>
               </InputGroupAddon>
               <InputGroupInput
                 id="email"
                 type="email"
-                placeholder="ejemplo@mineduc.cl"
+                name="email"
+                placeholder="usuario@educacion.gob.ec"
                 value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
+                onChange={(e) => {
+                  setFormData((prev) => ({ ...prev, email: e.target.value }));
+                  if (globalError) setGlobalError(null);
+                }}
                 onBlur={() => handleBlur("email")}
                 disabled={isLoading || isGoogleLoading}
                 aria-invalid={touched.email && !!emailErrorMsg}
-                aria-errormessage={touched.email && emailErrorMsg ? "email-error" : undefined}
+                aria-describedby={touched.email && emailErrorMsg ? "email-error" : undefined}
                 required
               />
             </InputGroup>
@@ -218,31 +275,32 @@ export function LoginSSOForm({ className }: { className?: string }) {
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <label
-              htmlFor="password"
-              className="font-sans text-body-sm font-medium text-foreground"
-            >
-              Contraseña
-            </label>
-            <InputGroup state={touched.password ? (passwordErrorMsg ? "error" : "success") : "default"}>
-              <InputGroupAddon>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-body-sm font-semibold font-sans text-foreground" htmlFor="password">
+                Contraseña <span className="text-danger">*</span>
+              </label>
+            </div>
+            <InputGroup state={touched.password && passwordErrorMsg ? "error" : "default"}>
+              <InputGroupAddon align="inline-start">
                 <InputGroupText>
-                  <Lock className="size-4" />
+                  <Lock className="h-5 w-5" />
                 </InputGroupText>
               </InputGroupAddon>
               <InputGroupInput
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="Ingresa tu contraseña"
+                name="password"
+                placeholder="••••••••"
                 value={formData.password}
-                onChange={(e) =>
-                  setFormData({ ...formData, password: e.target.value })
-                }
+                onChange={(e) => {
+                  setFormData((prev) => ({ ...prev, password: e.target.value }));
+                  if (globalError) setGlobalError(null);
+                }}
                 onBlur={() => handleBlur("password")}
                 disabled={isLoading || isGoogleLoading}
                 aria-invalid={touched.password && !!passwordErrorMsg}
-                aria-errormessage={touched.password && passwordErrorMsg ? "password-error" : undefined}
+                aria-describedby={touched.password && passwordErrorMsg ? "password-error" : undefined}
                 required
               />
               <InputGroupAddon align="inline-end">
@@ -250,13 +308,11 @@ export function LoginSSOForm({ className }: { className?: string }) {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <InputGroupButton
-                        variant="ghost"
-                        size="icon-sm"
+                        type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                        disabled={isLoading || isGoogleLoading}
                       >
-                        {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </InputGroupButton>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -272,8 +328,6 @@ export function LoginSSOForm({ className }: { className?: string }) {
               </p>
             )}
           </div>
-
-
 
           <div
             className="w-full"
@@ -295,6 +349,14 @@ export function LoginSSOForm({ className }: { className?: string }) {
           </div>
         </form>
       </div>
+
+      <MustChangePasswordDialog
+        open={showMustChangePassword}
+        onSuccess={() => {
+          setShowMustChangePassword(false);
+          router.replace("/dashboard");
+        }}
+      />
     </div>
   );
 }

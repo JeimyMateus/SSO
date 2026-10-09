@@ -23,8 +23,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Eye, EyeOff, AlertCircle, Info } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, Info, Loader2 } from "lucide-react";
 import { UsuarioItem } from "../data/usuarios-data";
+import { changeUserPasswordApi } from "../services/client-usuarios";
+import { toast } from "sonner";
 
 interface UsuarioPasswordDialogProps {
   usuario: UsuarioItem | null;
@@ -45,6 +47,7 @@ export function UsuarioPasswordDialog({
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [requireResetNextLogin, setRequireResetNextLogin] = React.useState(true);
   const [sendEmailNotification, setSendEmailNotification] = React.useState(true);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errors, setErrors] = React.useState<{
     newPassword?: string;
     confirmPassword?: string;
@@ -57,12 +60,13 @@ export function UsuarioPasswordDialog({
       setShowPassword(false);
       setShowConfirmPassword(false);
       setErrors({});
+      setIsSubmitting(false);
     }
   }, [open]);
 
   if (!usuario) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const nextErrors: { newPassword?: string; confirmPassword?: string } = {};
 
@@ -84,8 +88,20 @@ export function UsuarioPasswordDialog({
     }
 
     setErrors({});
-    onSuccess(usuario.id);
-    onOpenChange(false);
+    setIsSubmitting(true);
+
+    try {
+      await changeUserPasswordApi(usuario.id, newPassword, requireResetNextLogin);
+      onSuccess(usuario.id);
+      onOpenChange(false);
+    } catch (err: any) {
+      console.error("Error al actualizar contraseña:", err);
+      toast.error("Error al actualizar contraseña", {
+        description: err.message || "No se pudo actualizar la contraseña en Firebase Auth.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -282,13 +298,21 @@ export function UsuarioPasswordDialog({
 
           {/* Botones verticales apilados a ancho completo */}
           <div className="flex flex-col gap-2.5 w-full pt-3 border-t border-border mt-1">
-            <Button type="submit" variant="primary" className="w-full">
-              Actualizar contraseña
+            <Button type="submit" variant="primary" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Actualizando contraseña...
+                </span>
+              ) : (
+                "Actualizar contraseña"
+              )}
             </Button>
             <Button
               type="button"
               variant="neutral"
               className="w-full"
+              disabled={isSubmitting}
               onClick={() => onOpenChange(false)}
             >
               Cancelar
