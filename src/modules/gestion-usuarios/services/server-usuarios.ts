@@ -81,10 +81,13 @@ export async function getUsuarioByAuthUid(authUid: string): Promise<UsuarioItem 
 
 export async function createUsuario(data: Omit<UsuarioItem, "id">): Promise<UsuarioItem> {
   const now = Timestamp.now().toMillis();
+  const isActive = data.active !== undefined ? Boolean(data.active) : data.estado === "Activo";
   const usuarioToSave = {
     ...data,
     email: data.email.trim().toLowerCase(),
     correo: data.email.trim().toLowerCase(),
+    active: isActive,
+    estado: data.estado || (isActive ? "Activo" : "Inactivo"),
     createdAt: data.createdAt || now,
     updatedAt: now,
   };
@@ -105,17 +108,26 @@ export async function updateUsuario(id: string, data: Partial<UsuarioItem>): Pro
     return null;
   }
 
-  const updateData = {
+  const existingData = docSnap.data() as UsuarioItem;
+  let active = data.active;
+  if (active === undefined && data.estado !== undefined) {
+    active = data.estado === "Activo";
+  } else if (active === undefined && existingData.active === undefined) {
+    active = existingData.estado === "Activo";
+  }
+
+  const updateData: Record<string, any> = {
     ...data,
     ...(data.email && {
       email: data.email.trim().toLowerCase(),
       correo: data.email.trim().toLowerCase(),
     }),
+    ...(active !== undefined && { active }),
     updatedAt: Timestamp.now().toMillis(),
   };
 
   // Evitar sobreescribir el ID dentro del data si viene presente
-  delete (updateData as any).id;
+  delete updateData.id;
 
   await docRef.update(updateData);
 

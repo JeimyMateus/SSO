@@ -1,20 +1,54 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { fetchCurrentAuthProfile } from "@/modules/gestion-usuarios/services/client-usuarios";
+import { toast } from "sonner";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const [isVerifying, setIsVerifying] = useState(true);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.replace("/login-sso");
-    }
-  }, [user, loading, router]);
+    let isMounted = true;
 
-  if (loading) {
+    if (!loading) {
+      if (!user) {
+        setIsVerifying(false);
+        router.replace("/login-sso");
+      } else {
+        fetchCurrentAuthProfile()
+          .then((profile) => {
+            if (isMounted) {
+              if (profile.usuario && profile.usuario.active === false) {
+                toast.error("Acceso denegado", {
+                  description: "Tu usuario está inactivo. Contacta con el administrador.",
+                });
+                logout().then(() => router.replace("/login-sso"));
+              } else {
+                setIsVerifying(false);
+              }
+            }
+          })
+          .catch((err) => {
+            if (isMounted) {
+              toast.error("Acceso denegado", {
+                description: err.message || "Tu usuario no tiene acceso al sistema.",
+              });
+              logout().then(() => router.replace("/login-sso"));
+            }
+          });
+      }
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, loading, router, logout]);
+
+  if (loading || isVerifying) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">

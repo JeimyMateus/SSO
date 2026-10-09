@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifyAuthToken } from "@/lib/auth/server-auth";
+import { verifyActiveUser, AuthorizationError } from "@/lib/auth/server-auth";
 import {
   getUsuarioById,
   updateUsuario,
@@ -13,8 +13,14 @@ interface RouteParams {
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    await verifyAuthToken(request);
-  } catch (error) {
+    await verifyActiveUser(request);
+  } catch (error: any) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.statusCode }
+      );
+    }
     return NextResponse.json(
       { error: "No autorizado. Token inválido o ausente." },
       { status: 401 }
@@ -44,8 +50,14 @@ export async function GET(request: Request, { params }: RouteParams) {
 
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
-    await verifyAuthToken(request);
-  } catch (error) {
+    await verifyActiveUser(request);
+  } catch (error: any) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.statusCode }
+      );
+    }
     return NextResponse.json(
       { error: "No autorizado. Token inválido o ausente." },
       { status: 401 }
@@ -71,6 +83,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       ...(body.telefono !== undefined && { telefono: body.telefono.trim() }),
       ...(body.cargo !== undefined && { cargo: body.cargo.trim() }),
       ...(body.estado !== undefined && { estado: body.estado }),
+      ...(body.active !== undefined && { active: Boolean(body.active) }),
       ...(body.sedes !== undefined && { sedes: body.sedes }),
       ...(body.avatar !== undefined && { avatar: body.avatar }),
     };
@@ -96,8 +109,14 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    await verifyAuthToken(request);
-  } catch (error) {
+    await verifyActiveUser(request);
+  } catch (error: any) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.statusCode }
+      );
+    }
     return NextResponse.json(
       { error: "No autorizado. Token inválido o ausente." },
       { status: 401 }

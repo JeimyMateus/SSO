@@ -79,6 +79,7 @@ export interface UsuarioItem {
   telefono?: string;
   cargo?: string;
   estado: "Activo" | "Inactivo" | "Pendiente";
+  active?: boolean;
   fechaCreacion: string;
   sedes: UsuarioSede[];
   authUid?: string;

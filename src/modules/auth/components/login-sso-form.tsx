@@ -36,8 +36,10 @@ export function LoginSSOForm({ className }: { className?: string }) {
             router.replace("/dashboard");
           }
         })
-        .catch(() => {
-          router.replace("/dashboard");
+        .catch(async () => {
+          const { signOut } = await import("firebase/auth");
+          const { auth } = await import("@/lib/firebase/client");
+          await signOut(auth).catch(() => {});
         });
     }
   }, [user, authLoading, showMustChangePassword, router]);
@@ -77,18 +79,40 @@ export function LoginSSOForm({ className }: { className?: string }) {
     setIsGoogleLoading(true);
     setGlobalError(null);
     try {
-      const { signInWithPopup, GoogleAuthProvider } = await import("firebase/auth");
+      const { signInWithPopup, GoogleAuthProvider, signOut } = await import("firebase/auth");
       const { auth } = await import("@/lib/firebase/client");
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
 
-      toast.success("Sesión iniciada con éxito");
-      router.replace("/dashboard");
+      // Validar autorización del usuario en Firestore mediante el servidor
+      try {
+        const profile = await fetchCurrentAuthProfile();
+
+        if (profile.debeCambiarPassword) {
+          setShowMustChangePassword(true);
+          toast.info("Cambio de contraseña requerido", {
+            description: "Debes actualizar tu contraseña temporal antes de continuar.",
+          });
+        } else {
+          toast.success("Sesión iniciada con éxito");
+          router.replace("/dashboard");
+        }
+      } catch (authErr: any) {
+        // Cerrar sesión en Firebase Auth inmediatamente si el servidor deniega el acceso
+        await signOut(auth).catch(() => {});
+        const errorMsg = authErr.message || "Tu usuario no tiene acceso al sistema.";
+        setGlobalError(errorMsg);
+        toast.error("Acceso denegado", {
+          description: errorMsg,
+        });
+      }
     } catch (error: any) {
-      console.error(error);
-      toast.error("Error en Google Login", {
-        description: error.message || "No se pudo iniciar sesión con Google.",
-      });
+      console.error("Error en Google Login:", error);
+      if (error.code !== "auth/popup-closed-by-user") {
+        toast.error("Error en Google Login", {
+          description: error.message || "No se pudo iniciar sesión con Google.",
+        });
+      }
     } finally {
       setIsGoogleLoading(false);
     }
@@ -121,7 +145,7 @@ export function LoginSSOForm({ className }: { className?: string }) {
     setGlobalError(null);
 
     try {
-      const { signInWithEmailAndPassword } = await import("firebase/auth");
+      const { signInWithEmailAndPassword, signOut } = await import("firebase/auth");
       const { auth } = await import("@/lib/firebase/client");
       await signInWithEmailAndPassword(
         auth,
@@ -129,17 +153,26 @@ export function LoginSSOForm({ className }: { className?: string }) {
         formData.password
       );
 
-      // Verificar si requiere cambio de clave en primer login
-      const profile = await fetchCurrentAuthProfile().catch(() => null);
+      // Verificar autorización y si requiere cambio de clave en primer login
+      try {
+        const profile = await fetchCurrentAuthProfile();
 
-      if (profile?.debeCambiarPassword) {
-        setShowMustChangePassword(true);
-        toast.info("Cambio de contraseña requerido", {
-          description: "Debes actualizar tu contraseña temporal antes de continuar.",
+        if (profile?.debeCambiarPassword) {
+          setShowMustChangePassword(true);
+          toast.info("Cambio de contraseña requerido", {
+            description: "Debes actualizar tu contraseña temporal antes de continuar.",
+          });
+        } else {
+          toast.success("Sesión iniciada con éxito");
+          router.replace("/dashboard");
+        }
+      } catch (profileErr: any) {
+        await signOut(auth).catch(() => {});
+        const errorMsg = profileErr.message || "Tu usuario no tiene acceso al sistema.";
+        setGlobalError(errorMsg);
+        toast.error("Acceso denegado", {
+          description: errorMsg,
         });
-      } else {
-        toast.success("Sesión iniciada con éxito");
-        router.replace("/dashboard");
       }
     } catch (error: any) {
       console.error("Error al autenticar credenciales:", error);

@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
-import { verifyAuthToken } from "@/lib/auth/server-auth";
+import { verifyActiveUser, AuthorizationError } from "@/lib/auth/server-auth";
 import { getUsuarios, createUsuario } from "@/modules/gestion-usuarios/services/server-usuarios";
 import { UsuarioItem } from "@/modules/gestion-usuarios/types/usuario";
 
 export async function GET(request: Request) {
   try {
-    await verifyAuthToken(request);
-  } catch (error) {
+    await verifyActiveUser(request);
+  } catch (error: any) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.statusCode }
+      );
+    }
     return NextResponse.json(
       { error: "No autorizado. Token inválido o ausente." },
       { status: 401 }
@@ -27,8 +33,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await verifyAuthToken(request);
-  } catch (error) {
+    await verifyActiveUser(request);
+  } catch (error: any) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.statusCode }
+      );
+    }
     return NextResponse.json(
       { error: "No autorizado. Token inválido o ausente." },
       { status: 401 }

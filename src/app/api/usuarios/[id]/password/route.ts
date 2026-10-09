@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifyAuthToken } from "@/lib/auth/server-auth";
+import { verifyActiveUser, AuthorizationError } from "@/lib/auth/server-auth";
 import { setUserPassword } from "@/modules/gestion-usuarios/services/server-usuarios";
 
 interface RouteParams {
@@ -8,8 +8,14 @@ interface RouteParams {
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
-    await verifyAuthToken(request);
-  } catch (error) {
+    await verifyActiveUser(request);
+  } catch (error: any) {
+    if (error instanceof AuthorizationError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.statusCode }
+      );
+    }
     return NextResponse.json(
       { error: "No autorizado. Token inválido o ausente." },
       { status: 401 }

@@ -13,6 +13,26 @@ async function getAuthHeader(): Promise<HeadersInit> {
   };
 }
 
+async function handleApiResponse<T>(response: Response, defaultError: string): Promise<T> {
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.error || `${defaultError} (HTTP ${response.status})`;
+    
+    // Si la petición es rechazada por inactividad o token inválido, cerrar la sesión local
+    if ((response.status === 401 || response.status === 403) && typeof window !== "undefined") {
+      try {
+        const { signOut } = await import("firebase/auth");
+        await signOut(auth).catch(() => {});
+      } catch {
+        // Ignorar
+      }
+    }
+
+    throw new Error(message);
+  }
+  return response.json();
+}
+
 export async function fetchUsuarios(): Promise<UsuarioItem[]> {
   const headers = await getAuthHeader();
   const response = await fetch("/api/usuarios", {
@@ -20,12 +40,7 @@ export async function fetchUsuarios(): Promise<UsuarioItem[]> {
     headers,
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Error ${response.status}: No se pudieron obtener los usuarios.`);
-  }
-
-  return response.json();
+  return handleApiResponse<UsuarioItem[]>(response, "No se pudieron obtener los usuarios.");
 }
 
 export async function fetchUsuarioById(id: string): Promise<UsuarioItem> {
@@ -35,12 +50,7 @@ export async function fetchUsuarioById(id: string): Promise<UsuarioItem> {
     headers,
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Error ${response.status}: No se pudo obtener el usuario.`);
-  }
-
-  return response.json();
+  return handleApiResponse<UsuarioItem>(response, "No se pudo obtener el usuario.");
 }
 
 export async function createUsuarioApi(data: Omit<UsuarioItem, "id">): Promise<UsuarioItem> {
@@ -51,12 +61,7 @@ export async function createUsuarioApi(data: Omit<UsuarioItem, "id">): Promise<U
     body: JSON.stringify(data),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Error ${response.status}: No se pudo crear el usuario.`);
-  }
-
-  return response.json();
+  return handleApiResponse<UsuarioItem>(response, "No se pudo crear el usuario.");
 }
 
 export async function updateUsuarioApi(id: string, data: Partial<UsuarioItem>): Promise<UsuarioItem> {
@@ -67,12 +72,7 @@ export async function updateUsuarioApi(id: string, data: Partial<UsuarioItem>): 
     body: JSON.stringify(data),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Error ${response.status}: No se pudo actualizar el usuario.`);
-  }
-
-  return response.json();
+  return handleApiResponse<UsuarioItem>(response, "No se pudo actualizar el usuario.");
 }
 
 export async function deleteUsuarioApi(id: string): Promise<void> {
@@ -100,12 +100,10 @@ export async function changeUserPasswordApi(
     body: JSON.stringify({ password, requireResetNextLogin }),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Error ${response.status}: No se pudo actualizar la contraseña.`);
-  }
-
-  return response.json();
+  return handleApiResponse<{ message: string; authUid: string; debeCambiarPassword: boolean }>(
+    response,
+    "No se pudo actualizar la contraseña."
+  );
 }
 
 export interface AuthProfileResponse {
@@ -138,10 +136,5 @@ export async function updateMyPasswordApi(newPassword: string): Promise<{ messag
     body: JSON.stringify({ newPassword }),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || "No se pudo actualizar la contraseña.");
-  }
-
-  return response.json();
+  return handleApiResponse<{ message: string }>(response, "No se pudo actualizar la contraseña.");
 }
