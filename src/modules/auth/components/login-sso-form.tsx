@@ -68,7 +68,7 @@ export function LoginSSOForm({
             ) {
               const { signOut } = await import("firebase/auth");
               const { auth } = await import("@/lib/firebase/client");
-              await signOut(auth).catch(() => {});
+              await signOut(auth).catch(() => { });
             }
           });
         return;
@@ -84,8 +84,8 @@ export function LoginSSOForm({
               targetApp === "notas"
                 ? redirectTo
                 : isSuperAdmin
-                ? redirectTo
-                : "/mis-aplicaciones";
+                  ? redirectTo
+                  : "/mis-aplicaciones";
             router.replace(targetUrl);
           }
         })
@@ -102,7 +102,7 @@ export function LoginSSOForm({
           }
           const { signOut } = await import("firebase/auth");
           const { auth } = await import("@/lib/firebase/client");
-          await signOut(auth).catch(() => {});
+          await signOut(auth).catch(() => { });
         });
     }
   }, [user, authLoading, showMustChangePassword, router, targetApp, redirectTo, resolvedMfaRedirect]);
@@ -179,7 +179,7 @@ export function LoginSSOForm({
           router.replace(redirectTo);
           return;
         } catch (notasErr: any) {
-          await signOut(auth).catch(() => {});
+          await signOut(auth).catch(() => { });
           const errorMsg = notasErr.message || "Tu usuario no tiene acceso a Notas.";
           setGlobalError(errorMsg);
           toast.error("Acceso denegado", {
@@ -208,7 +208,7 @@ export function LoginSSOForm({
         }
       } catch (authErr: any) {
         // Cerrar sesión en Firebase Auth inmediatamente si el servidor deniega el acceso
-        await signOut(auth).catch(() => {});
+        await signOut(auth).catch(() => { });
         const errorMsg = authErr.message || "Tu usuario no tiene acceso al sistema.";
         setGlobalError(errorMsg);
         toast.error("Acceso denegado", {
@@ -489,44 +489,6 @@ export function LoginSSOForm({
               {isLoading ? "Iniciando sesión..." : "Iniciar sesión"}
             </Button>
           </div>
-
-          <div className="pt-2 border-t border-border/60 flex flex-col gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setFormData({
-                  email: "docente@mineduc.gob.ec",
-                  password: "Password123*",
-                });
-                setTouched({ email: true, password: true });
-                toast.info("Cuenta Docente asignada", {
-                  description: "Correo: docente@mineduc.gob.ec (Juan Carlos Pérez · Notas)",
-                });
-              }}
-              className="w-full text-xs text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg hover:bg-muted/50 border border-dashed border-border"
-            >
-              <UserCheck className="size-3.5 text-primary" />
-              <span>Usar cuenta Docente: <strong>docente@mineduc.gob.ec</strong></span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setFormData({
-                  email: "prueba2@gmail.com",
-                  password: "Password123*",
-                });
-                setTouched({ email: true, password: true });
-                toast.info("Cuenta de prueba asignada", {
-                  description: "Correo: prueba2@gmail.com (Espacio personal estándar)",
-                });
-              }}
-              className="w-full text-xs text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg hover:bg-muted/50 border border-dashed border-border"
-            >
-              <UserCheck className="size-3.5 text-primary" />
-              <span>Usar cuenta estándar: <strong>prueba2@gmail.com</strong></span>
-            </button>
-          </div>
         </form>
       </div>
 
@@ -541,8 +503,8 @@ export function LoginSSOForm({
               targetApp === "notas"
                 ? redirectTo
                 : isSuperAdmin
-                ? redirectTo
-                : "/mis-aplicaciones";
+                  ? redirectTo
+                  : "/mis-aplicaciones";
             router.replace(targetUrl);
           } catch {
             router.replace(targetApp === "notas" ? redirectTo : "/mis-aplicaciones");
